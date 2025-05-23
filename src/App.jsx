@@ -56,7 +56,7 @@ function App() {
             {/* Logo */}
             <div className="flex items-center space-x-2">
               <GlassesIcon className="w-8 h-8 text-primary" />
-              <span className="text-xl font-bold tracking-tight">OpticalHub</span>
+              <span className="text-xl font-bold tracking-tight">OpticalHub2</span>
             </div>
 
             {/* Desktop Nav */}
@@ -145,7 +145,7 @@ function App() {
             <div>
               <div className="flex items-center space-x-2 mb-4">
                 <GlassesIcon className="w-6 h-6 text-primary" />
-                <span className="text-lg font-bold tracking-tight">OpticalHub</span>
+                <span className="text-lg font-bold tracking-tight">OpticalHub2</span>
               </div>
               <p className="text-surface-300 mb-4">Your one-stop destination for premium eyewear with cutting-edge virtual try-on technology.</p>
               <div className="flex space-x-4">
