@@ -205,7 +205,7 @@ function Home() {
                 <p className="text-surface-500 dark:text-surface-400">No categories available at the moment.</p>
               </div>
             ) : (
-            {categories.map((category) => (
+              categories.map((category) => (
               <motion.div 
                 key={category.id}
                 variants={itemVariants}
@@ -227,7 +227,7 @@ function Home() {
                   </button>
                 </div>
               </motion.div>
-            ))}
+              ))
             )}
           </motion.div>
         </div>
@@ -258,7 +258,7 @@ function Home() {
                 <p className="text-surface-500 dark:text-surface-400">No products available at the moment.</p>
               </div>
             ) : (
-            {trendingProducts.map((product) => (
+              trendingProducts.map((product) => (
               <div 
                 key={product.id} 
                 className="bg-white dark:bg-surface-900 rounded-xl shadow-soft overflow-hidden group"
@@ -329,7 +329,7 @@ function Home() {
                   <button className="w-full btn-primary mt-4 py-2">Add to Cart</button>
                 </div>
               </div>
-            ))}
+              ))
             )}
           </div>
         </div>
