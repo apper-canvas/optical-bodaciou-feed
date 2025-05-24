@@ -1,18 +1,106 @@
-import { useState, useEffect } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
-import { ToastContainer, toast } from 'react-toastify';
-import { motion, AnimatePresence } from 'framer-motion';
-import { getIcon } from './utils/iconUtils';
+import { createContext, useEffect, useState } from 'react'
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
+import { useDispatch, useSelector } from 'react-redux'
+import { ToastContainer } from 'react-toastify'
+import { motion, AnimatePresence } from 'framer-motion'
+import { setUser, clearUser } from './store/userSlice'
+import { getIcon } from './utils/iconUtils'
 
 // Pages
-import Home from './pages/Home';
-import NotFound from './pages/NotFound';
+import Home from './pages/Home'
+import NotFound from './pages/NotFound'
+import Login from './pages/Login'
+import Signup from './pages/Signup'
+import Callback from './pages/Callback'
+import ErrorPage from './pages/ErrorPage'
+
+// Create auth context
+export const AuthContext = createContext(null)
 
 const GlassesIcon = getIcon('glasses');
 
 function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const location = useLocation();
+
+  const navigate = useNavigate()
+  const dispatch = useDispatch()
+  const [isInitialized, setIsInitialized] = useState(false)
+
+  // Get authentication status with proper error handling
+  const userState = useSelector((state) => state.user)
+  const isAuthenticated = userState?.isAuthenticated || false
+
+  // Initialize ApperUI once when the app loads
+  useEffect(() => {
+    const { ApperClient, ApperUI } = window.ApperSDK
+    const client = new ApperClient({
+      apperProjectId: import.meta.env.VITE_APPER_PROJECT_ID,
+      apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
+    })
+
+    // Initialize but don't show login yet
+    ApperUI.setup(client, {
+      target: '#authentication',
+      clientId: import.meta.env.VITE_APPER_PROJECT_ID,
+      view: 'both',
+      onSuccess: function (user) {
+        setIsInitialized(true)
+        // CRITICAL: This exact currentPath logic must be preserved in all implementations
+        // DO NOT simplify or modify this pattern as it ensures proper redirection flow
+        let currentPath = window.location.pathname + window.location.search
+        let redirectPath = new URLSearchParams(window.location.search).get('redirect')
+        const isAuthPage = currentPath.includes('/login') || currentPath.includes('/signup') || currentPath.includes(
+          '/callback') || currentPath.includes('/error')
+        if (user) {
+          // User is authenticated
+          if (redirectPath) {
+            navigate(redirectPath)
+          } else if (!isAuthPage) {
+            if (!currentPath.includes('/login') && !currentPath.includes('/signup')) {
+              navigate(currentPath)
+            } else {
+              navigate('/')
+            }
+          } else {
+            navigate('/')
+          }
+          // Store user information in Redux
+          dispatch(setUser(JSON.parse(JSON.stringify(user))))
+        } else {
+          // User is not authenticated
+          if (!isAuthPage) {
+            navigate(
+              currentPath.includes('/signup')
+                ? `/signup?redirect=${currentPath}`
+                : currentPath.includes('/login')
+                  ? `/login?redirect=${currentPath}`
+                  : '/login')
+          } else if (redirectPath) {
+            if (
+              ![
+                'error',
+                'signup',
+                'login',
+                'callback'
+              ].some((path) => currentPath.includes(path)))
+              navigate(`/login?redirect=${redirectPath}`)
+            else {
+              navigate(currentPath)
+            }
+          } else if (isAuthPage) {
+            navigate(currentPath)
+          } else {
+            navigate('/login')
+          }
+          dispatch(clearUser())
+        }
+      },
+      onError: function(error) {
+        console.error("Authentication failed:", error)
+      }
+    })
+  }, [])
 
   // Check for user's preferred color scheme
   useEffect(() => {
@@ -38,6 +126,21 @@ function App() {
     setIsDarkMode(!isDarkMode);
   };
 
+  // Authentication methods to share via context
+  const authMethods = {
+    isInitialized,
+    logout: async () => {
+      try {
+        const { ApperUI } = window.ApperSDK
+        await ApperUI.logout()
+        dispatch(clearUser())
+        navigate('/login')
+      } catch (error) {
+        console.error("Logout failed:", error)
+      }
+    }
+  }
+
   // Header component
   function Header() {
     const MoonIcon = getIcon('moon');
@@ -46,6 +149,7 @@ function App() {
     const ShoppingCartIcon = getIcon('shopping-cart');
     const SearchIcon = getIcon('search');
     const HeartIcon = getIcon('heart');
+    const UserIcon = getIcon('user')
     
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -105,6 +209,24 @@ function App() {
               >
                 <MenuIcon className="w-5 h-5" />
               </button>
+
+              {/* User Authentication Button */}
+              {isAuthenticated ? (
+                <button 
+                  onClick={authMethods.logout}
+                  className="p-2 rounded-full hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
+                  aria-label="Logout"
+                >
+                  <UserIcon className="w-5 h-5" />
+                </button>
+              ) : (
+                <button 
+                  onClick={() => navigate('/login')}
+                  className="btn-primary px-4 py-2 text-sm"
+                >
+                  Sign In
+                </button>
+              )}
             </div>
           </div>
 
@@ -206,35 +328,52 @@ function App() {
     );
   }
 
+  // Don't render routes until initialization is complete
+  if (!isInitialized) {
+    return <div className="loading">Initializing application...</div>
+  }
+
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-      
-      <main className="flex-grow">
-        <AnimatePresence mode="wait">
-          <Routes location={location} key={location.pathname}>
-            <Route path="/" element={<Home />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AnimatePresence>
-      </main>
-      
-      <Footer />
-      
-      <ToastContainer
-        position="bottom-right"
-        autoClose={5000}
-        hideProgressBar={false}
-        newestOnTop
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme={isDarkMode ? "dark" : "light"}
-        toastClassName="rounded-lg"
-      />
-    </div>
+    <AuthContext.Provider value={authMethods}>
+      <div className="min-h-screen flex flex-col">
+        {!location.pathname.includes('/login') && 
+         !location.pathname.includes('/signup') && 
+         !location.pathname.includes('/callback') && 
+         !location.pathname.includes('/error') && <Header />}
+        
+        <main className="flex-grow">
+          <AnimatePresence mode="wait">
+            <Routes location={location} key={location.pathname}>
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/callback" element={<Callback />} />
+              <Route path="/error" element={<ErrorPage />} />
+              <Route path="/" element={<Home />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </AnimatePresence>
+        </main>
+        
+        {!location.pathname.includes('/login') && 
+         !location.pathname.includes('/signup') && 
+         !location.pathname.includes('/callback') && 
+         !location.pathname.includes('/error') && <Footer />}
+        
+        <ToastContainer
+          position="bottom-right"
+          autoClose={5000}
+          hideProgressBar={false}
+          newestOnTop
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+          theme={isDarkMode ? "dark" : "light"}
+          toastClassName="rounded-lg"
+        />
+      </div>
+    </AuthContext.Provider>
   );
 }
 

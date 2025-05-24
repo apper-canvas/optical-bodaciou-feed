@@ -1,7 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
+import { useSelector } from 'react-redux';
 import { getIcon } from '../utils/iconUtils';
+import productService from '../services/ProductService';
+import tryOnSessionService from '../services/TryOnSessionService';
+import customerService from '../services/CustomerService';
 
 function MainFeature() {
   // Icons
@@ -28,38 +32,67 @@ function MainFeature() {
   const canvasRef = useRef(null);
   const isWebcamActive = useRef(false);
   
-  // Glasses options
-  const glassesOptions = [
-    {
-      id: 1,
-      name: "Classic Round",
-      price: 129.99,
-      image: "https://images.unsplash.com/photo-1577803645773-f96470509666?ixlib=rb-1.2.1&auto=format&fit=crop&w=300&q=80",
-      overlay: "https://images.burst.shopify.com/photos/brown-framed-glasses.jpg?width=300&format=pjpg&exif=0&iptc=0"
-    },
-    {
-      id: 2,
-      name: "Modern Square",
-      price: 149.99,
-      image: "https://images.unsplash.com/photo-1572635196237-14b3f281503f?ixlib=rb-1.2.1&auto=format&fit=crop&w=300&q=80",
-      overlay: "https://images.burst.shopify.com/photos/glasses-frame-and-case.jpg?width=300&format=pjpg&exif=0&iptc=0"
-    },
-    {
-      id: 3,
-      name: "Aviator Style",
-      price: 169.99,
-      image: "https://images.unsplash.com/photo-1511499767150-a48a237f0083?ixlib=rb-1.2.1&auto=format&fit=crop&w=300&q=80",
-      overlay: "https://images.burst.shopify.com/photos/black-framed-glasses.jpg?width=300&format=pjpg&exif=0&iptc=0"
-    },
-    {
-      id: 4,
-      name: "Cat Eye",
-      price: 139.99,
-      image: "https://images.unsplash.com/photo-1574258495973-f010dfbb5371?ixlib=rb-1.2.1&auto=format&fit=crop&w=300&q=80",
-      overlay: "https://images.burst.shopify.com/photos/glasses-and-reading-book.jpg?width=300&format=pjpg&exif=0&iptc=0"
-    }
-  ];
+  // Dynamic glasses options from database
+  const [glassesOptions, setGlassesOptions] = useState([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+  
+  // Get user information from Redux
+  const { user, isAuthenticated } = useSelector((state) => state.user);
+  const [currentCustomer, setCurrentCustomer] = useState(null);
 
+  // Load products and customer data on component mount
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoadingProducts(true);
+      try {
+        // Load available products for try-on
+        const products = await productService.fetchProducts({ pagingInfo: { limit: 8, offset: 0 } });
+        
+        // Transform products to include fallback images
+        const formattedProducts = products.map((product, index) => ({
+          ...product,
+          id: product.Id,
+          name: product.Name,
+          image: product.image || [
+            "https://images.unsplash.com/photo-1577803645773-f96470509666?ixlib=rb-1.2.1&auto=format&fit=crop&w=300&q=80",
+            "https://images.unsplash.com/photo-1572635196237-14b3f281503f?ixlib=rb-1.2.1&auto=format&fit=crop&w=300&q=80",
+            "https://images.unsplash.com/photo-1511499767150-a48a237f0083?ixlib=rb-1.2.1&auto=format&fit=crop&w=300&q=80",
+            "https://images.unsplash.com/photo-1574258495973-f010dfbb5371?ixlib=rb-1.2.1&auto=format&fit=crop&w=300&q=80"
+          ][index % 4],
+          overlay: product.overlay_image || [
+            "https://images.burst.shopify.com/photos/brown-framed-glasses.jpg?width=300&format=pjpg&exif=0&iptc=0",
+            "https://images.burst.shopify.com/photos/glasses-frame-and-case.jpg?width=300&format=pjpg&exif=0&iptc=0",
+            "https://images.burst.shopify.com/photos/black-framed-glasses.jpg?width=300&format=pjpg&exif=0&iptc=0",
+            "https://images.burst.shopify.com/photos/glasses-and-reading-book.jpg?width=300&format=pjpg&exif=0&iptc=0"
+          ][index % 4]
+        }));
+        
+        setGlassesOptions(formattedProducts);
+        
+        // If user is authenticated, try to find or create customer record
+        if (isAuthenticated && user?.emailAddress) {
+          let customer = await customerService.getCustomerByEmail(user.emailAddress);
+          
+          if (!customer) {
+            // Create customer record if it doesn't exist
+            customer = await customerService.createCustomer({
+              Name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.emailAddress,
+              email: user.emailAddress,
+              profile_image: user.profilePicture || ''
+            });
+          }
+          
+          setCurrentCustomer(customer);
+        }
+      } catch (error) {
+        console.error('Error loading try-on data:', error);
+      } finally {
+        setIsLoadingProducts(false);
+      }
+    };
+
+    loadData();
+  }, [isAuthenticated, user]);
   // Simulated face detection
   useEffect(() => {
     if (showTryOn && selectedImage) {
@@ -135,15 +168,62 @@ function MainFeature() {
   };
   
   // Start try-on process
-  const startTryOn = () => {
+  const startTryOn = async () => {
     if (!selectedGlasses) {
       toast.warning("Please select glasses to try on");
       return;
     }
     
+    // Save try-on session to database if user is authenticated
+    if (isAuthenticated && currentCustomer && selectedImage) {
+      try {
+        const sessionData = {
+          Name: `Try-on session for ${selectedGlasses.name}`,
+          customer_image: selectedImage,
+          selected_product: selectedGlasses.id,
+          customer: currentCustomer.Id,
+          status: 'Started',
+          is_face_detected: false
+        };
+        
+        const session = await tryOnSessionService.createTryOnSession(sessionData);
+        if (session) {
+          console.log('Try-on session saved:', session);
+        }
+      } catch (error) {
+        console.error('Error saving try-on session:', error);
+        // Continue with try-on even if saving fails
+      }
+    }
+    
     setShowTryOn(true);
   };
   
+  // Update try-on session when face is detected
+  useEffect(() => {
+    const updateSessionWithFaceDetection = async () => {
+      if (isFaceDetected && isAuthenticated && currentCustomer) {
+        try {
+          // Find the most recent session for this customer
+          const sessions = await tryOnSessionService.getSessionsByCustomer(currentCustomer.Id);
+          if (sessions.length > 0) {
+            const latestSession = sessions[0];
+            await tryOnSessionService.updateTryOnSession(latestSession.Id, {
+              is_face_detected: true,
+              status: 'Completed'
+            });
+          }
+        } catch (error) {
+          console.error('Error updating try-on session:', error);
+        }
+      }
+    };
+
+    if (isFaceDetected) {
+      updateSessionWithFaceDetection();
+    }
+  }, [isFaceDetected, isAuthenticated, currentCustomer]);
+
   // Reset the try-on
   const resetTryOn = () => {
     setSelectedImage(null);
@@ -156,6 +236,12 @@ function MainFeature() {
   
   // Add to cart
   const addToCart = () => {
+    if (!isAuthenticated) {
+      toast.warning("Please sign in to add items to your cart");
+      return;
+    }
+    
+    // TODO: Implement actual cart functionality
     toast.success(`${selectedGlasses.name} added to your cart!`);
     resetTryOn();
   };
@@ -385,6 +471,16 @@ function MainFeature() {
                     {/* Frame selection */}
                     <div className="md:w-2/3">
                       <h3 className="text-xl font-semibold mb-4">Select Your Frames</h3>
+                      {isLoadingProducts ? (
+                        <div className="text-center py-8">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                          <p className="text-sm text-surface-600 dark:text-surface-400">Loading products...</p>
+                        </div>
+                      ) : glassesOptions.length === 0 ? (
+                        <div className="text-center py-8">
+                          <p className="text-surface-600 dark:text-surface-400">No products available for try-on at the moment.</p>
+                        </div>
+                      ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {glassesOptions.map((glasses) => (
                           <div 
@@ -413,6 +509,7 @@ function MainFeature() {
                           </div>
                         ))}
                       </div>
+                      )}
                       
                       <div className="mt-6 flex justify-end">
                         <button 

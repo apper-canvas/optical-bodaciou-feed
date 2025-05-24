@@ -1,7 +1,11 @@
 import { motion } from 'framer-motion';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
 import { getIcon } from '../utils/iconUtils';
 import MainFeature from '../components/MainFeature';
+import productCategoryService from '../services/ProductCategoryService';
+import productService from '../services/ProductService';
+import testimonialService from '../services/TestimonialService';
 
 function Home() {
   const CheckIcon = getIcon('check-circle');
@@ -10,86 +14,15 @@ function Home() {
   const ShieldIcon = getIcon('shield');
   const TruckIcon = getIcon('truck');
   const HeartIcon = getIcon('heart');
+
+  // State for dynamic data
+  const [categories, setCategories] = useState([]);
+  const [trendingProducts, setTrendingProducts] = useState([]);
+  const [testimonials, setTestimonials] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   
-  // Featured categories
-  const categories = [
-    {
-      id: 1,
-      name: "Eyeglasses",
-      image: "https://images.unsplash.com/photo-1633621618597-31d9c199adc7?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80",
-      count: 1200
-    },
-    {
-      id: 2,
-      name: "Sunglasses",
-      image: "https://images.unsplash.com/photo-1511499767150-a48a237f0083?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80",
-      count: 850
-    },
-    {
-      id: 3,
-      name: "Contact Lenses",
-      image: "https://images.unsplash.com/photo-1600854964509-6c56f2571f5e?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80",
-      count: 320
-    },
-    {
-      id: 4,
-      name: "Reading Glasses",
-      image: "https://images.unsplash.com/photo-1556015048-4d3aa10bdfe1?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80",
-      count: 450
-    }
-  ];
-  
-  // Trending products
-  const trendingProducts = [
-    {
-      id: 1,
-      name: "Atlas Titanium",
-      category: "Eyeglasses",
-      price: 149.99,
-      discountPrice: 119.99,
-      image: "https://images.unsplash.com/photo-1574258495973-f010dfbb5371?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80",
-      rating: 4.8,
-      reviews: 124,
-      colors: ["#000000", "#3a3a3c", "#a7c5eb"],
-      isNew: true
-    },
-    {
-      id: 2,
-      name: "Riviera Shade",
-      category: "Sunglasses",
-      price: 199.99,
-      discountPrice: null,
-      image: "https://images.unsplash.com/photo-1577803645773-f96470509666?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80",
-      rating: 4.9,
-      reviews: 89,
-      colors: ["#8B4513", "#000000", "#023047"],
-      isNew: false
-    },
-    {
-      id: 3,
-      name: "Clarity Monthly",
-      category: "Contact Lenses",
-      price: 49.99,
-      discountPrice: 39.99,
-      image: "https://images.unsplash.com/photo-1587170194921-7a936088f193?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80",
-      rating: 4.7,
-      reviews: 215,
-      colors: [],
-      isNew: false
-    },
-    {
-      id: 4,
-      name: "Prism Square",
-      category: "Reading Glasses",
-      price: 89.99,
-      discountPrice: null,
-      image: "https://images.unsplash.com/photo-1572635196237-14b3f281503f?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80",
-      rating: 4.6,
-      reviews: 56,
-      colors: ["#6D6875", "#B5838D", "#E5989B"],
-      isNew: true
-    }
-  ];
+  // Get user authentication status
+  const { isAuthenticated } = useSelector((state) => state.user);
   
   const features = [
     {
@@ -108,6 +41,54 @@ function Home() {
       description: "Choose colors, lenses, and add prescription details"
     }
   ];
+
+  // Load data on component mount
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        // Load categories and products in parallel
+        const [categoriesData, productsData, testimonialsData] = await Promise.all([
+          productCategoryService.fetchCategories({ pagingInfo: { limit: 4, offset: 0 } }),
+          productService.getTrendingProducts(4),
+          testimonialService.getFeaturedTestimonials(3)
+        ]);
+        
+        // Set fallback image URLs for categories without images
+        const categoriesWithImages = categoriesData.map((category, index) => ({
+          ...category,
+          image: category.image || [
+            "https://images.unsplash.com/photo-1633621618597-31d9c199adc7?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80",
+            "https://images.unsplash.com/photo-1511499767150-a48a237f0083?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80",
+            "https://images.unsplash.com/photo-1600854964509-6c56f2571f5e?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80",
+            "https://images.unsplash.com/photo-1556015048-4d3aa10bdfe1?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80"
+          ][index % 4]
+        }));
+        
+        // Set fallback images for products without images
+        const productsWithImages = productsData.map((product, index) => ({
+          ...product,
+          image: product.image || [
+            "https://images.unsplash.com/photo-1574258495973-f010dfbb5371?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80",
+            "https://images.unsplash.com/photo-1577803645773-f96470509666?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80",
+            "https://images.unsplash.com/photo-1587170194921-7a936088f193?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80",
+            "https://images.unsplash.com/photo-1572635196237-14b3f281503f?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80"
+          ][index % 4],
+          colors: ["#000000", "#3a3a3c", "#a7c5eb"] // Default colors
+        }));
+        
+        setCategories(categoriesWithImages);
+        setTrendingProducts(productsWithImages);
+        setTestimonials(testimonialsData);
+      } catch (error) {
+        console.error('Error loading home page data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
 
   // Animation variants
   const containerVariants = {
@@ -129,6 +110,17 @@ function Home() {
       transition: { duration: 0.5 }
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-surface-600 dark:text-surface-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -206,8 +198,13 @@ function Home() {
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, amount: 0.2 }}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+            className={`grid gap-6 ${categories.length === 0 ? 'grid-cols-1' : `grid-cols-1 sm:grid-cols-2 lg:grid-cols-${Math.min(categories.length, 4)}`}`}
           >
+            {categories.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-surface-500 dark:text-surface-400">No categories available at the moment.</p>
+              </div>
+            ) : (
             {categories.map((category) => (
               <motion.div 
                 key={category.id}
@@ -217,13 +214,13 @@ function Home() {
                 <div className="aspect-[4/3] overflow-hidden">
                   <img 
                     src={category.image} 
-                    alt={category.name}
+                    alt={category.Name || category.name}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                   />
                 </div>
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent flex flex-col justify-end p-6">
-                  <h3 className="text-white text-xl font-medium">{category.name}</h3>
-                  <p className="text-white/80 text-sm">{category.count} Products</p>
+                  <h3 className="text-white text-xl font-medium">{category.Name || category.name}</h3>
+                  <p className="text-white/80 text-sm">{category.product_count || 0} Products</p>
                   <button className="mt-3 text-white font-medium flex items-center text-sm group-hover:text-primary transition-colors">
                     View Collection
                     <ArrowRightIcon className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-1" />
@@ -231,6 +228,7 @@ function Home() {
                 </div>
               </motion.div>
             ))}
+            )}
           </motion.div>
         </div>
       </section>
@@ -254,7 +252,12 @@ function Home() {
             </button>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className={`grid gap-6 ${trendingProducts.length === 0 ? 'grid-cols-1' : `grid-cols-1 sm:grid-cols-2 lg:grid-cols-${Math.min(trendingProducts.length, 4)}`}`}>
+            {trendingProducts.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-surface-500 dark:text-surface-400">No products available at the moment.</p>
+              </div>
+            ) : (
             {trendingProducts.map((product) => (
               <div 
                 key={product.id} 
@@ -263,17 +266,17 @@ function Home() {
                 <div className="relative aspect-square overflow-hidden">
                   <img 
                     src={product.image} 
-                    alt={product.name}
+                    alt={product.Name || product.name}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
                   
-                  {product.discountPrice && (
+                  {product.discount_price && (
                     <div className="absolute top-3 left-3 bg-secondary text-white text-sm font-medium py-1 px-2 rounded">
                       SALE
                     </div>
                   )}
                   
-                  {product.isNew && (
+                  {product.is_new && (
                     <div className="absolute top-3 left-3 bg-primary text-white text-sm font-medium py-1 px-2 rounded">
                       NEW
                     </div>
@@ -289,20 +292,20 @@ function Home() {
                 
                 <div className="p-4">
                   <div className="flex justify-between mb-1">
-                    <span className="text-xs text-surface-500 dark:text-surface-400">{product.category}</span>
+                    <span className="text-xs text-surface-500 dark:text-surface-400">Product</span>
                     <div className="flex items-center">
                       <StarIcon className="h-3.5 w-3.5 text-yellow-400" />
-                      <span className="ml-1 text-xs font-medium">{product.rating}</span>
+                      <span className="ml-1 text-xs font-medium">{product.rating || 5}</span>
                     </div>
                   </div>
                   
-                  <h3 className="font-medium text-lg mb-2">{product.name}</h3>
+                  <h3 className="font-medium text-lg mb-2">{product.Name || product.name}</h3>
                   
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      {product.discountPrice ? (
+                      {product.discount_price ? (
                         <>
-                          <span className="font-bold text-primary">${product.discountPrice}</span>
+                          <span className="font-bold text-primary">${product.discount_price}</span>
                           <span className="text-surface-500 line-through text-sm">${product.price}</span>
                         </>
                       ) : (
@@ -310,7 +313,7 @@ function Home() {
                       )}
                     </div>
                     
-                    {product.colors.length > 0 && (
+                    {product.colors?.length > 0 && (
                       <div className="flex gap-1">
                         {product.colors.map((color, index) => (
                           <div 
@@ -327,6 +330,7 @@ function Home() {
                 </div>
               </div>
             ))}
+            )}
           </div>
         </div>
       </section>
@@ -406,27 +410,33 @@ function Home() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[1, 2, 3].map((testimonial) => (
-              <div key={testimonial} className="glass-card">
+            {testimonials.length === 0 ? (
+              <div className="col-span-3 text-center py-12">
+                <p className="text-surface-500 dark:text-surface-400">No testimonials available at the moment.</p>
+              </div>
+            ) : (
+              testimonials.map((testimonial, index) => (
+              <div key={testimonial.Id || index} className="glass-card">
                 <div className="flex items-center gap-1 mb-4">
-                  {[1, 2, 3, 4, 5].map((star) => (
+                  {Array.from({ length: testimonial.rating || 5 }, (_, star) => (
                     <StarIcon key={star} className="h-5 w-5 text-yellow-400" />
                   ))}
                 </div>
                 <p className="text-surface-700 dark:text-surface-300 mb-4">
-                  "The virtual try-on feature is amazing! I could see exactly how different frames looked on my face without leaving home. Found my perfect pair on the first try!"
+                  {testimonial.content || "The virtual try-on feature is amazing! I could see exactly how different frames looked on my face without leaving home. Found my perfect pair on the first try!"}
                 </p>
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-surface-300 dark:bg-surface-600 overflow-hidden">
-                    <img src={`https://i.pravatar.cc/100?img=${testimonial + 10}`} alt="Customer" className="w-full h-full object-cover" />
+                    <img src={`https://i.pravatar.cc/100?img=${index + 10}`} alt="Customer" className="w-full h-full object-cover" />
                   </div>
                   <div>
-                    <h4 className="font-medium text-sm">Alex Thompson</h4>
+                    <h4 className="font-medium text-sm">{testimonial.Name || "Verified Customer"}</h4>
                     <p className="text-xs text-surface-500 dark:text-surface-400">Verified Customer</p>
                   </div>
                 </div>
               </div>
-            ))}
+            ))
+            )}
           </div>
         </div>
       </section>
